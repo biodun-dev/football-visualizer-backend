@@ -114,6 +114,20 @@ def detect_event(ball_position, last_touch, pitch_bounds, ball_velocity, closest
     return event
 
 
+# Associate new tracks with old tracks
+def associate_new_tracks(new_tracks, old_tracks, iou_threshold=0.3):
+    for new_track in new_tracks:
+        best_match = None
+        max_iou = 0
+        for old_track in old_tracks:
+            iou_score = iou(new_track['bbox'], old_track['bbox'])
+            if iou_score > max_iou and iou_score > iou_threshold:
+                max_iou = iou_score
+                best_match = old_track
+        if best_match:
+            new_track['track_id'] = best_match['track_id']
+
+
 # Main function
 def main(opt):
     yolov8_model_path = 'weights/yolov8n.pt'
@@ -165,6 +179,8 @@ def main(opt):
         cap = cv2.VideoCapture(opt.source)
         frame_num = 0
 
+        old_tracks = []  # Initialize old tracks list
+
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
@@ -201,21 +217,27 @@ def main(opt):
 
             if detections:
                 deep_sort.detection_to_deepsort(detections, frame)
+                new_tracks = []
                 for track in deep_sort.deepsort.tracker.tracks:
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
                     tracking_id = track.track_id
                     bbox = track.to_tlbr()
                     pitch_x, pitch_y = get_mapped_position(bbox, homography_matrix)
+                    new_tracks.append({'track_id': tracking_id, 'bbox': bbox, 'pitch_x': pitch_x, 'pitch_y': pitch_y})
 
-                    for obj in yolo_output:
-                        label = obj['label']
-                        confidence = obj['score']
-                        if confidence >= confidence_thresholds.get(label, 0.8):
-                            team_color = team_assignment_handler.assign_team_to_player(frame, bbox, label)
-                            yolo_writer.writerow([frame_num, label, bbox, confidence, tracking_id, pitch_x, pitch_y, team_color])
-                            activity = "Dribble" if ball_position and np.linalg.norm(np.array([pitch_x, pitch_y]) - np.array(ball_position)) < 2 else "Running"
-                            player_activity_writer.writerow([frame_num, tracking_id, team_color, pitch_x, pitch_y, activity])
+                # Associate new tracks with old tracks
+                associate_new_tracks(new_tracks, old_tracks)
+                old_tracks = new_tracks  # Update old tracks for the next frame
+
+                for track in new_tracks:
+                    tracking_id = track['track_id']
+                    bbox = track['bbox']
+                    pitch_x = track['pitch_x']
+                    pitch_y = track['pitch_y']
+                    activity = "Dribble" if ball_position and np.linalg.norm(np.array([pitch_x, pitch_y]) - np.array(ball_position)) < 2 else "Running"
+                    team_color = team_assignment_handler.assign_team_to_player(frame, bbox, "player")
+                    player_activity_writer.writerow([frame_num, tracking_id, team_color, pitch_x, pitch_y, activity])
 
             if ball_position:
                 ball_velocity = np.linalg.norm(np.array(ball_position))  # Placeholder for velocity computation
