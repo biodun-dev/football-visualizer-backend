@@ -255,7 +255,7 @@ def main(opt):
         cv2.destroyAllWindows()
 
 
-# Entry poin
+# Entry point
 if __name__ == '__main__':
     opt = Arguments().parse()
     with torch.no_grad():
