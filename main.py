@@ -224,6 +224,10 @@ def main(opt):
                     tracking_id = track.track_id
                     bbox = track.to_tlbr()
                     pitch_x, pitch_y = get_mapped_position(bbox, homography_matrix)
+                    label = "player"  # Example label (should match detected object type)
+                    confidence = 0.9  # Example confidence (replace with actual value)
+                    team_color = team_assignment_handler.assign_team_to_player(frame, bbox, label)
+                    yolo_writer.writerow([frame_num, label, bbox, confidence, tracking_id, pitch_x, pitch_y, team_color])
                     new_tracks.append({'track_id': tracking_id, 'bbox': bbox, 'pitch_x': pitch_x, 'pitch_y': pitch_y})
 
                 # Associate new tracks with old tracks
